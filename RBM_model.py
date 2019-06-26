@@ -40,7 +40,7 @@ class BinaryRBM():
         # F.softplus(x) calculates log(1+exp(x))
         return -torch.matmul(b.t(),v) - F.softplus(torch.addmm(c,w,v)).sum(0)
 
-    def  sample_h_given_v(self, h, v, c, w):
+    def  sample_h_given_v(self, v, c, w):
         """
           Args:
         h (torch.Tensor): the hidden states
@@ -55,9 +55,9 @@ class BinaryRBM():
         """
         return ( torch.addmm(c,w,v).sigmoid_()>torch.rand(self.num_h,1) ).float() # c.f. Eq (17)
 
-    def  sample_v_given_h(self, h, v, b, w):
+    def  sample_v_given_h(self, h, b, w):
         """
-          Args:
+        Args:
         h (torch.Tensor): the hidden states
         v (torch.Tensor): the visible states
         b (torch.Tensor): the visible bias
@@ -69,5 +69,49 @@ class BinaryRBM():
 
         """
         return ( torch.addmm(b.t(),h.t(),w).sigmoid_()>torch.rand(1,self.num_v) ).float().view(-1,1) # c.f. Eq (18)
+
+
+    def block_gibbs_sampling(self, initial_v, num_iter, h, v, c, b, w):
+        """
+        Args:
+        initial_v (torch.Tensor): the initial visible states to start the block gibbs sampling
+        num_iter(int): the number of iterations for the gibbs sampling
+        h (torch.Tensor): the hidden states
+        v (torch.Tensor): the visible states
+        c (torch.Tensor): the hidden bias
+        b (torch.Tensor): the visible bias
+        w (torch.Tensor): the weight matrix
+
+        Returns:
+        gibbs_v (torch.Tensor): the sampled visible states
+
+        """
+        v = initial_v
+
+        for _ in range(num_iter):
+            h = sample_h_given_v(v,c,w)
+            v = sample_v_given_h(h,b,w)
+
+        return v
+
+    def free_energy_gradient(self, v, c, w):
+        """
+        Args:
+        v (torch.Tensor): the visible states
+        c (torch.Tensor): the hidden bias
+        w (torch.Tensor): the weight matrix
+
+        Returns:
+        grad_w (torch.Tensor): the gradient of the free energy with respect to w
+        grad_b (torch.Tensor): the gradient of the free energy with respect to b
+        grad_c (torch.Tensor): the gradient of the free energy with respect to c
+
+        """
+
+        grad_c =  torch.addmm(c,w,v).sigmoid_()
+        grad_b = -v
+        grad_w = torch.ger(grad_c.squeeze(1),v.squeeze(1))
+
+        return grad_w, grad_b, grad_c
 
 
