@@ -53,7 +53,7 @@ class BinaryRBM():
                                   It is a column vector that contains 0 or 1. 
 
         """
-        return ( torch.addmm(c,w,v).sigmoid_()>torch.rand(self.num_h,1) ).float() # c.f. Eq (17)
+        return (torch.addmm(c,w,v).sigmoid_()>torch.rand(self.num_h,1)).float() # c.f. Eq (17)
 
     def  sample_v_given_h(self, h, b, w):
         """
@@ -68,7 +68,7 @@ class BinaryRBM():
                                   It is a column vector that contains 0 or 1. 
 
         """
-        return ( torch.addmm(b.t(),h.t(),w).sigmoid_()>torch.rand(1,self.num_v) ).float().view(-1,1) # c.f. Eq (18)
+        return ( torch.addmm(b,w.t(),h.sigmoid_()>torch.rand(self.num_v, 1) ).float() # c.f. Eq (18)
 
 
     def block_gibbs_sampling(self, initial_v, num_iter, h, v, c, b, w):
@@ -108,10 +108,39 @@ class BinaryRBM():
 
         """
 
-        grad_c =  torch.addmm(c,w,v).sigmoid_()
+        grad_c =  torch.addmm(c.t(),w,v).sigmoid_().sum(dim=1).
         grad_b = -v
-        grad_w = torch.ger(grad_c.squeeze(1),v.squeeze(1))
-
+        grad_w = torch.malmul(grad_c,v.t())
+        
         return grad_w, grad_b, grad_c
 
+    def mini_batch_gradient_func (self, cd_k, h, v, c, b, w):
+        
+         """
+        Args:
+        cd_k (int): cd_k mode that is chosen
+        h (torch.Tensor): the hidden states
+        v (torch.Tensor): the visible states
+        c (torch.Tensor): the hidden bias
+        b (torch.Tensor): the visible bias
+        w (torch.Tensor): the weight matrix
+
+        Returns:
+        grad_mini_batch (Torch) average gradient across the mini-batch
+        """
+
+        v_k = self.block_gibbs_sampling(initial_v = v, num_iter = cd_k, h, v, c, b, w)
+        
+        [grad_w_posi, grad_b_posi, grad_c_posi] = free_energy_gradient(v,c,w)
+
+        [grad_w_neg, grad_b_neg, grad_c_neg] = free_energy_gradient(v_k,c,w))
+
+        return .sum()/
+        
+        v.size(1)
+
+
+    def train(self, data, max_epochs = 1000, learning_rate = 0.1):
+
+    def generate v
 
