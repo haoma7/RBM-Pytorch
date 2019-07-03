@@ -3,8 +3,9 @@ import torch.nn.functional as F
 import numpy as np
 import torchvision
 from torchvision import transforms
-
 import matplotlib.pyplot as plt
+
+
 class BinaryRBM():
     
     # RBM Initialization
@@ -28,11 +29,7 @@ class BinaryRBM():
     def free_energy_func (self, v):
         """
         Args:
-        h (torch.Tensor): the hidden states
         v (torch.Tensor): the visible states
-        c (torch.Tensor): the hidden bias
-        b (torch.Tensor): the visible bias
-        w (torch.Tensor): the weight matrix
 
         Returns:
         free_energy (torch.Tensor): the free energy F(v) (c.f. Eq (12))
@@ -62,8 +59,6 @@ class BinaryRBM():
         """
         Args:
         h (torch.Tensor): the hidden states
-        b (torch.Tensor): the visible bias
-        w (torch.Tensor): the weight matrix
         
         Returns:
         sampled_v (torch.Tensor): the sample v according to Eq.(18). 
@@ -94,8 +89,6 @@ class BinaryRBM():
         """
         Args:
         v (torch.Tensor): the visible states
-        c (torch.Tensor): the hidden bias
-        w (torch.Tensor): the weight matrix
 
         Returns:
         grad_w (torch.Tensor): the average gradient of the free energy with respect to w across all samples
@@ -133,13 +126,17 @@ class BinaryRBM():
     def train(self, dataloader, cd_k, max_epochs = 5, lr = 1):
         """
         Args:
-        dataloader: each data samle is a row vector in the matrix data. 
+        dataloader: dataloader of the training data 
+
+        Returns:
+        w, b, c: the parameters of the RBM
         """
         for iter in range(max_epochs):
+
             print('Epoch {}'.format(iter))
 
             for mini_batch_samples in dataloader:
-                mini_batch_samples_=mini_batch_samples[0].squeeze(1).view(-1,mini_batch_samples[0].size(0))
+                mini_batch_samples_ = mini_batch_samples[0].squeeze(1).view(-1, mini_batch_samples[0].size(0))
                 grad_w, grad_b, grad_c = self.mini_batch_gradient_func(mini_batch_samples_, cd_k)
                 
                 # update w, b, c
@@ -148,7 +145,6 @@ class BinaryRBM():
                 self.b -= lr * grad_b
                 self.c -= lr * grad_c
             
-            print(torch.norm(self.w))
         return self.w, self.b, self.c
 
 def gen_mnist_image(X,num_of_img = 10):
@@ -164,7 +160,8 @@ if __name__ == "__main__":
     train_dataset = torchvision.datasets.MNIST("~", train=True, transform=transforms.ToTensor(), download=True)
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size = 64,shuffle = True)
     
-    model.train(train_loader,cd_k=1)
+    # Train
+    model.train(train_loader,cd_k = 1)
     
     # Test 
     i = iter(train_loader).next()
@@ -173,7 +170,7 @@ if __name__ == "__main__":
     v_gen = model.block_gibbs_sampling(initial_v = i[0].view(-1,i[0].size(0)),num_iter = 40)
     
     # Display the images
-    plt.imshow(gen_mnist_image(v_gen.t().view(64,1,28,28).numpy().round(),64),cmap = "gray")
+    plt.imshow(gen_mnist_image(v_gen.t().view(train_loader.batch_size,1,28,28).numpy().round(),train_loader.batch_size),cmap = "gray")
     plt.show()
 
     
