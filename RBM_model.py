@@ -4,26 +4,28 @@ import numpy as np
 import torchvision
 from torchvision import transforms
 import matplotlib.pyplot as plt
-
+import pickle
 
 class BinaryRBM():
     
     # RBM Initialization
     def __init__(self, num_v, num_h):
+
         """
         Args:
             num_v (int): the number of nodes in the visible layer
             num_h (int): the number of nodes in the hidden layer       
         """
 
-        self.num_v = num_v
-        self.num_h = num_h
+        self.num_v = num_v # the number of visible nodes
+        self.num_h = num_h # the number of hidden nodes
 
         # normalization to ensure stability ? 
-        self.w = torch.randn(num_h, num_v,dtype=torch.float32) / np.sqrt(num_v)
-        self.c = torch.zeros(num_h, dtype=torch.float32).unsqueeze(1) # bias (column) vector for the hidden layer
+        self.w = torch.randn(num_h, num_v, dtype=torch.float32) / np.sqrt(num_v)
         self.b = torch.zeros(num_v, dtype=torch.float32).unsqueeze(1) # bias (column) vector for the visible layer
+        self.c = torch.zeros(num_h, dtype=torch.float32).unsqueeze(1) # bias (column) vector for the hidden layer
 
+    
 
     # Calculation of the free energy F(v)
     def free_energy_func (self, v):
@@ -80,6 +82,7 @@ class BinaryRBM():
         v = initial_v
 
         for _ in range(num_iter):
+            
             h = self.sample_h_given_v(v)
             v = self.sample_v_given_h(h)
 
@@ -96,10 +99,10 @@ class BinaryRBM():
         grad_c (torch.Tensor): the average gradient of the free energy with respect to c across all samples
 
         """
-        temp = torch.addmm(self.c,self.w,v).sigmoid_()
+        temp = -torch.addmm(self.c,self.w,v).sigmoid_()
 
         grad_c =  temp.mean(dim=1).unsqueeze(1)
-        grad_b = -v.mean(dim=1).unsqueeze(1)
+        grad_b = - v.mean(dim=1).unsqueeze(1)
         grad_w = torch.matmul(temp,v.t())/v.size(1)
 
         
@@ -123,10 +126,13 @@ class BinaryRBM():
         return grad_w_pos - grad_w_neg, grad_b_pos - grad_b_neg, grad_c_pos - grad_c_neg # c.f. Eq.(13)
         
 
-    def train(self, dataloader, cd_k, max_epochs = 5, lr = 1):
+    def train(self, dataloader, cd_k, max_epochs = 10, lr = 0.01):
         """
         Args:
         dataloader: dataloader of the training data 
+        cd_k: the contrastive divergence mode
+        max_epochs: number of epochs
+        lr: the learning rate
 
         Returns:
         w, b, c: the parameters of the RBM
@@ -136,15 +142,17 @@ class BinaryRBM():
             print('Epoch {}'.format(iter))
 
             for mini_batch_samples in dataloader:
-                mini_batch_samples_ = mini_batch_samples[0].squeeze(1).view(-1, mini_batch_samples[0].size(0))
+                mini_batch_samples_ = torch.flatten(mini_batch_samples[0].squeeze(1),start_dim=1).t().round()
                 grad_w, grad_b, grad_c = self.mini_batch_gradient_func(mini_batch_samples_, cd_k)
                 
-                # update w, b, c
                 
+                # update w, b, c
                 self.w -= lr * grad_w
                 self.b -= lr * grad_b
                 self.c -= lr * grad_c
-            
+            # break
+            print(torch.norm(self.w))
+        
         return self.w, self.b, self.c
 
 def gen_mnist_image(X,num_of_img = 10):
@@ -154,23 +162,33 @@ def gen_mnist_image(X,num_of_img = 10):
 
 if __name__ == "__main__":
 
-    model = BinaryRBM(784,100)
+    model = BinaryRBM(784,128)
 
     # Load Data
     train_dataset = torchvision.datasets.MNIST("~", train=True, transform=transforms.ToTensor(), download=True)
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size = 64,shuffle = True)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size = 32,shuffle = True)
     
     # Train
-    model.train(train_loader,cd_k = 1)
-    
+    w, b, c = model.train(train_loader, cd_k = 5)
+
+    with open('objs.pkl', 'wb') as f:  # Python 3: open(..., 'wb')
+        pickle.dump([w.numpy(), b.numpy(),c.numpy()], f)
+
+
     # Test 
+    # input data for testing 
     i = iter(train_loader).next()
 
     # Generate new visible states with a random initial visible states via Gibbs sampling the RBM
-    v_gen = model.block_gibbs_sampling(initial_v = i[0].view(-1,i[0].size(0)),num_iter = 40)
-    
+    v_gen = model.block_gibbs_sampling(initial_v = i[0][0].view(-1,1).round(),num_iter = 1000)
+
+    plt.figure(1)
+    plt.subplot(121)
+    plt.imshow(i[0][0].squeeze(0).round(),cmap = "gray")
+
     # Display the images
-    plt.imshow(gen_mnist_image(v_gen.t().view(train_loader.batch_size,1,28,28).numpy().round(),train_loader.batch_size),cmap = "gray")
+    plt.subplot(122)
+    plt.imshow(v_gen.view(28,28).numpy(),cmap = "gray")
     plt.show()
 
     
