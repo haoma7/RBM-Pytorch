@@ -25,7 +25,7 @@ class BinaryRBM():
 
 
     # Calculation of the free energy F(v)
-    def free_energy_func (self, v, c, b, w):
+    def free_energy_func (self, v):
         """
         Args:
         h (torch.Tensor): the hidden states
@@ -42,14 +42,13 @@ class BinaryRBM():
         # .sum(0) represents the summation of different rows
         # F.softplus(x) calculates log(1+exp(x))
   
-        return -torch.matmul(b.t(),v) - F.softplus(torch.addmm(c,w,v)).sum(0)
+        return -torch.matmul(self.b.t(),v) - F.softplus(torch.addmm(self.c,self.w,v)).sum(0)
 
-    def sample_h_given_v(self, v, c, w):
+    def sample_h_given_v(self, v):
         """
           Args:
         v (torch.Tensor): the visible states
-        c (torch.Tensor): the hidden bias
-        w (torch.Tensor): the weight matrix
+
         
         Returns:
         sampled_h (torch.Tensor): the sample h according to Eq.(17). 
@@ -57,13 +56,12 @@ class BinaryRBM():
 
         """
      
-        return (torch.addmm(c,w,v).sigmoid_()>torch.rand(self.num_h,1)).float() # c.f. Eq (17)
+        return (torch.addmm(self.c,self.w,v).sigmoid_()>torch.rand(self.num_h,1)).float() # c.f. Eq (17)
 
-    def sample_v_given_h(self, h, b, w):
+    def sample_v_given_h(self, h):
         """
         Args:
         h (torch.Tensor): the hidden states
-        v (torch.Tensor): the visible states
         b (torch.Tensor): the visible bias
         w (torch.Tensor): the weight matrix
         
@@ -72,7 +70,7 @@ class BinaryRBM():
                                   It is a column vector that contains 0 or 1. 
 
         """
-        return ( torch.addmm(b,w.t(),h).sigmoid_()>torch.rand(self.num_v, 1) ).float() # c.f. Eq (18)
+        return ( torch.addmm(self.b, self.w.t(), h).sigmoid_()>torch.rand(self.num_v, 1) ).float() # c.f. Eq (18)
 
 
     def block_gibbs_sampling(self, initial_v, num_iter):
@@ -80,24 +78,19 @@ class BinaryRBM():
         Args:
         initial_v (torch.Tensor): the initial visible states to start the block gibbs sampling
         num_iter(int): the number of iterations for the gibbs sampling
-        v (torch.Tensor): the visible states
-        c (torch.Tensor): the hidden bias
-        b (torch.Tensor): the visible bias
-        w (torch.Tensor): the weight matrix
-
+    
         Returns:
         gibbs_v (torch.Tensor): the sampled visible states
-
         """
         v = initial_v
 
         for _ in range(num_iter):
-            h = self.sample_h_given_v(v,self.c,self.w)
-            v = self.sample_v_given_h(h,self.b,self.w)
+            h = self.sample_h_given_v(v)
+            v = self.sample_v_given_h(h)
 
         return v
 
-    def free_energy_gradient(self, v, c, w):
+    def free_energy_gradient(self, v):
         """
         Args:
         v (torch.Tensor): the visible states
@@ -110,7 +103,7 @@ class BinaryRBM():
         grad_c (torch.Tensor): the average gradient of the free energy with respect to c across all samples
 
         """
-        temp = torch.addmm(c,w,v).sigmoid_()
+        temp = torch.addmm(self.c,self.w,v).sigmoid_()
 
         grad_c =  temp.mean(dim=1).unsqueeze(1)
         grad_b = -v.mean(dim=1).unsqueeze(1)
@@ -119,26 +112,22 @@ class BinaryRBM():
         
         return grad_w, grad_b, grad_c
 
-    def mini_batch_gradient_func (self, cd_k, v, c, b, w):
+    def mini_batch_gradient_func (self, v, cd_k):
         
         """
         Args:
-        cd_k (int): cd_k mode that is chosen
-        h (torch.Tensor): the hidden states
         v (torch.Tensor): the visible states
-        c (torch.Tensor): the hidden bias
-        b (torch.Tensor): the visible bias
-        w (torch.Tensor): the weight matrix
+        cd_k (int): cd_k mode that is chosen
 
         Returns:
         grad_mini_batch (Torch) the average gradient across all samples in the mini-batch
         """
         v_k = self.block_gibbs_sampling(initial_v = v, num_iter = cd_k)
         
-        [grad_w_pos, grad_b_pos, grad_c_pos] = self.free_energy_gradient(v,c,w)
-        [grad_w_neg, grad_b_neg, grad_c_neg] = self.free_energy_gradient(v_k,c,w)
+        [grad_w_pos, grad_b_pos, grad_c_pos] = self.free_energy_gradient(v)
+        [grad_w_neg, grad_b_neg, grad_c_neg] = self.free_energy_gradient(v_k)
 
-        return grad_w_pos-grad_w_neg, grad_b_pos-grad_b_neg, grad_c_pos-grad_c_neg # c.f. Eq.(13)
+        return grad_w_pos - grad_w_neg, grad_b_pos - grad_b_neg, grad_c_pos - grad_c_neg # c.f. Eq.(13)
         
 
     def train(self, dataloader, cd_k, max_epochs = 5, lr = 1):
@@ -151,7 +140,7 @@ class BinaryRBM():
 
             for mini_batch_samples in dataloader:
                 mini_batch_samples_=mini_batch_samples[0].squeeze(1).view(-1,mini_batch_samples[0].size(0))
-                grad_w, grad_b, grad_c = self.mini_batch_gradient_func(cd_k,mini_batch_samples_ , self.c, self.b, self.w)
+                grad_w, grad_b, grad_c = self.mini_batch_gradient_func(mini_batch_samples_, cd_k)
                 
                 # update w, b, c
                 
