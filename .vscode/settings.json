@@ -1,0 +1,6 @@
+{
+    "python.pythonPath": "/anaconda3/envs/RBM/bin/python",
+    "python.linting.pylintEnabled": false,
+    "python.linting.mypyEnabled": true,
+    "python.linting.enabled": true
+}
